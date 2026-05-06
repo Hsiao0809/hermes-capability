@@ -128,9 +128,11 @@ async function render() {
 
   document.getElementById('summary-cards').innerHTML = `
     <div class="card">
-      <h2>💰 已實現損益</h2>
-      <div class="stat-value" style="font-size: 24px;">${formatPnl(t.realized_pnl)} USDT</div>
-      <div class="stat-row"><span class="stat-label">總交易</span><span class="stat-value">${t.total_trades}</span></div>
+      <h2>💰 帳戶權益</h2>
+      <div class="stat-value" style="font-size: 24px;">${formatPnl(t.initial_balance + t.realized_pnl + t.unrealized_pnl)} USDT</div>
+      <div class="stat-row"><span class="stat-label">初始本金</span><span class="stat-value">${t.initial_balance} USDT</span></div>
+      <div class="stat-row"><span class="stat-label">已實現</span><span class="stat-value">${formatPnl(t.realized_pnl)} USDT</span></div>
+      <div class="stat-row"><span class="stat-label">可用餘額</span><span class="stat-value">${t.available_balance} USDT</span></div>
       <div class="stat-row"><span class="stat-label">勝率</span><span class="stat-value">${t.winning_trades}/${total} (${winRate}%)</span></div>
     </div>
     <div class="card">

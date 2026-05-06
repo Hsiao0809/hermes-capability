@@ -1,89 +1,238 @@
 #!/usr/bin/env python3
 """
-trade.py — Hermes 主動紙交易 CLI
+trade.py — Hermes 主動紙交易 CLI v2
 
 使用方式：
-  python3 trade.py long SYMBOL --entry PRICE --sl STOP --tp1 TARGET1 --tp2 TARGET2 --risk USDT
+  python3 trade.py long SYMBOL --entry PRICE --sl STOP --tp1 TARGET1 --tp2 TARGET2 --risk USDT --leverage 1
   python3 trade.py short SYMBOL --entry PRICE --sl STOP --tp1 TARGET1 --tp2 TARGET2 --risk USDT
-  python3 trade.py close TRADE_ID
+  python3 trade.py close TRADE_ID [--exit PRICE]
   python3 trade.py list
+  python3 trade.py balance
+  python3 trade.py price SYMBOL
 
-範例：
-  python3 trade.py long BTCUSDT --entry 80500 --sl 79500 --tp1 83000 --tp2 85000 --risk 10
+支援標的格式：
+  - 加密貨幣：BTCUSDT, ETHUSDT, STORJUSDT (Binance)
+  - 台股：2330.TW (台積電), 2454.TW (聯發科), 2317.TW (鴻海)
+  - 美股：AAPL, TSLA, NVDA
+
+本金：300 USDT 初始（無槓桿預設，可開到 5x）
 """
 
 import json
 import os
 import sys
 import argparse
+import re
 from datetime import datetime, timezone, timedelta
 import urllib.request
 
 CST = timezone(timedelta(hours=8))
-DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
-CONFIG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 TRADES_FILE = os.path.join(DATA_DIR, "paper_trades.json")
 
 os.makedirs(DATA_DIR, exist_ok=True)
+
+
+# ═══════════════════════════════════════════════
+# Price fetching
+# ═══════════════════════════════════════════════
+
+def get_price(symbol):
+    """Fetch live price for any supported symbol type."""
+    symbol = symbol.upper().strip()
+
+    # Binance crypto
+    if symbol.endswith('USDT') or symbol in ['BTCUSDT', 'ETHUSDT', 'BNBUSDT']:
+        return get_binance_price(symbol)
+
+    # Taiwan stock: 2330.TW -> fetch from twse or yahoo
+    if '.TW' in symbol:
+        return get_tw_stock_price(symbol)
+
+    # US stock: plain ticker
+    if re.match(r'^[A-Z]{1,5}$', symbol):
+        return get_us_stock_price(symbol)
+
+    # Try Binance as fallback
+    return get_binance_price(symbol)
+
+
+def get_binance_price(symbol):
+    """Fetch crypto price from Binance public API."""
+    if not symbol.endswith('USDT'):
+        symbol = symbol + 'USDT'
+    try:
+        url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
+        with urllib.request.urlopen(url, timeout=10) as resp:
+            data = json.loads(resp.read())
+            return float(data['price'])
+    except Exception as e:
+        raise ValueError(f"Binance price fetch failed for {symbol}: {e}")
+
+
+def get_tw_stock_price(symbol):
+    """Fetch Taiwan stock price from Yahoo Finance (no API key needed)."""
+    ticker = symbol.replace('.TW', '.TW')
+    try:
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?range=1d&interval=1d"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read())
+            meta = data['chart']['result'][0]['meta']
+            return float(meta['regularMarketPrice'])
+    except Exception as e:
+        raise ValueError(f"TW stock price fetch failed for {symbol}: {e}")
+
+
+def get_us_stock_price(symbol):
+    """Fetch US stock price from Yahoo Finance."""
+    try:
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range=1d&interval=1d"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read())
+            meta = data['chart']['result'][0]['meta']
+            return float(meta['regularMarketPrice'])
+    except Exception as e:
+        raise ValueError(f"US stock price fetch failed for {symbol}: {e}")
+
+
+# ═══════════════════════════════════════════════
+# Config & Trades data
+# ═══════════════════════════════════════════════
 
 def load_config():
     with open(CONFIG_PATH) as f:
         return json.load(f)
 
+
 def save_config(cfg):
     with open(CONFIG_PATH, 'w') as f:
         json.dump(cfg, f, indent=2, ensure_ascii=False)
 
+
 def load_trades():
     if not os.path.exists(TRADES_FILE):
-        return {"trades": [], "stats": {"total_realized_pnl_usdt": 0.0, "total_unrealized_pnl_usdt": 0.0, "max_drawdown_usdt": 0.0, "total_trades": 0, "winning_trades": 0, "losing_trades": 0}}
+        return {
+            "trades": [],
+            "stats": {
+                "total_realized_pnl_usdt": 0.0,
+                "total_unrealized_pnl_usdt": 0.0,
+                "max_drawdown_usdt": 0.0,
+                "total_trades": 0,
+                "winning_trades": 0,
+                "losing_trades": 0
+            }
+        }
     with open(TRADES_FILE) as f:
         return json.load(f)
+
 
 def save_trades(data):
     with open(TRADES_FILE, 'w') as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
-def get_current_price(symbol):
-    """Fetch live price from Binance public API."""
-    url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
-    try:
-        with urllib.request.urlopen(url, timeout=10) as resp:
-            data = json.loads(resp.read())
-            return float(data['price'])
-    except Exception as e:
-        print(f"⚠️  Failed to fetch price for {symbol}: {e}", file=sys.stderr)
-        return None
+
+def update_available_balance():
+    """Calculate available balance: initial + realized PnL - open position risk."""
+    cfg = load_config()
+    trades_data = load_trades()
+    initial = cfg['account']['initial_balance_usdt']
+    realized = trades_data['stats']['total_realized_pnl_usdt']
+
+    # Open trades still have risk locked
+    open_risk = 0
+    for t in trades_data['trades']:
+        if t['status'] == 'open':
+            open_risk += t.get('risk_usdt', 0)
+
+    available = initial + realized - open_risk
+    cfg['account']['available_balance_usdt'] = round(available, 2)
+    cfg['account']['paper_balance_usdt'] = round(initial + realized, 2)
+    save_config(cfg)
+    return available
+
+
+# ═══════════════════════════════════════════════
+# Trade actions
+# ═══════════════════════════════════════════════
 
 def open_trade(args):
     cfg = load_config()
     trades_data = load_trades()
     trades = trades_data["trades"]
 
+    # Build symbol
+    symbol = args.symbol.upper().strip()
+
     # Check max positions
-    open_trades = [t for t in trades if t.get("status") == "open"]
+    open_trades = [t for t in trades if t["status"] == "open"]
     max_pos = cfg["account"]["max_positions"]
     if len(open_trades) >= max_pos:
         print(f"❌ 已達最大持倉數量 ({max_pos})，無法開新單")
         return False
 
-    # Calculate position size
-    risk_usdt = args.risk
-    sl_pct = abs(float(args.sl) - float(args.entry)) / float(args.entry)
-    position_size = risk_usdt / sl_pct  # in USDT notional
+    # Get live price to verify entry
+    try:
+        live_price = get_price(symbol)
+    except ValueError as e:
+        print(f"❌ 無法取得 {symbol} 價格: {e}")
+        return False
 
-    trade_id = f"PT-{datetime.now(CST).strftime('%Y%m%d-%H%M%S')}-{args.symbol}"
+    # Entry validation
+    entry = float(args.entry)
+    slippage_pct = abs(entry - live_price) / live_price * 100
+    if slippage_pct > 2.0:
+        print(f"⚠️  進場價 {entry} 偏離當前市價 {live_price} 達 {slippage_pct:.1f}%")
+        print(f"   建議使用當前市價 {live_price} 作為進場價")
+        confirm = input(f"   仍然使用 {entry}? (y/N): ")
+        if confirm.lower() != 'y':
+            return False
+
+    # Leverage
+    leverage = getattr(args, 'leverage', 1)
+    if leverage > cfg['account']['max_leverage']:
+        print(f"❌ 槓桿 {leverage}x 超過上限 {cfg['account']['max_leverage']}x")
+        return False
+
+    # Check available balance
+    available = update_available_balance()
+    risk_usdt = float(args.risk)
+
+    if risk_usdt > available:
+        print(f"❌ 風險 {risk_usdt} USDT 超過可用餘額 {available:.2f} USDT")
+        return False
+
+    if risk_usdt > cfg['account']['max_risk_per_trade']:
+        print(f"❌ 風險 {risk_usdt} USDT 超過單筆上限 {cfg['account']['max_risk_per_trade']} USDT")
+        return False
+
+    # Calculate position size
+    sl_pct = abs(float(args.sl) - entry) / entry
+    if sl_pct == 0:
+        print("❌ 停損價與進場價相同")
+        return False
+
+    position_notional = (risk_usdt / sl_pct) * leverage  # leveraged notional
+    position_size = position_notional / entry  # in units
+
+    trade_id = f"PT-{datetime.now(CST).strftime('%Y%m%d-%H%M%S')}-{symbol.replace('.','')}"
 
     trade = {
         "id": trade_id,
-        "symbol": args.symbol,
+        "symbol": symbol,
         "side": args.side.upper(),
-        "entry_price": float(args.entry),
+        "entry_price": entry,
         "stop_loss": float(args.sl),
         "take_profit_1": float(args.tp1) if args.tp1 else None,
         "take_profit_2": float(args.tp2) if args.tp2 else None,
-        "position_size_usdt": round(position_size, 2),
+        "leverage": leverage,
+        "position_size": round(position_size, 6),
+        "position_notional_usdt": round(position_notional, 2),
         "risk_usdt": risk_usdt,
+        "asset_type": "crypto" if 'USDT' in symbol else ("tw_stock" if '.TW' in symbol else "us_stock"),
         "status": "open",
         "opened_at": datetime.now(CST).isoformat(),
         "closed_at": None,
@@ -105,22 +254,30 @@ def open_trade(args):
     trades.append(trade)
     trades_data["stats"]["total_trades"] += 1
     save_trades(trades_data)
+    update_available_balance()
+
+    # Classify market type for display
+    market_type = "🪙 加密" if 'USDT' in symbol else ("🇹🇼 台股" if '.TW' in symbol else "🇺🇸 美股")
 
     print(f"✅ 開單成功:")
     print(f"   ID:     {trade_id}")
+    print(f"   市場:   {market_type}")
+    print(f"   標的:   {symbol}")
     print(f"   方向:   {'📈 做多' if trade['side'] == 'LONG' else '📉 做空'}")
-    print(f"   幣種:   {trade['symbol']}")
-    print(f"   進場:   {trade['entry_price']}")
+    print(f"   進場:   {entry} (市價 {live_price})")
+    print(f"   槓桿:   {leverage}x")
     print(f"   停損:   {trade['stop_loss']} ({sl_pct*100:.1f}%)")
     if trade['take_profit_1']:
-        tp1_pct = abs(trade['take_profit_1'] - trade['entry_price']) / trade['entry_price'] * 100
-        print(f"   停利 1: {trade['take_profit_1']} (+{tp1_pct:.1f}%)")
+        tp1_pct = abs(trade['take_profit_1'] - entry) / entry * 100
+        print(f"   停利 1: {trade['take_profit_1']} ({tp1_pct:+.1f}%)")
     if trade['take_profit_2']:
-        tp2_pct = abs(trade['take_profit_2'] - trade['entry_price']) / trade['entry_price'] * 100
-        print(f"   停利 2: {trade['take_profit_2']} (+{tp2_pct:.1f}%)")
+        tp2_pct = abs(trade['take_profit_2'] - entry) / entry * 100
+        print(f"   停利 2: {trade['take_profit_2']} ({tp2_pct:+.1f}%)")
     print(f"   風險:   {risk_usdt} USDT")
-    print(f"   部位:   {position_size:.2f} USDT")
+    print(f"   名目部位: {trade['position_notional_usdt']:.2f} USDT ({trade['position_size']} units)")
+    print(f"   可用餘額: {update_available_balance():.2f} USDT")
     return True
+
 
 def close_trade(trade_id, exit_price=None, reason="manual"):
     trades_data = load_trades()
@@ -128,27 +285,32 @@ def close_trade(trade_id, exit_price=None, reason="manual"):
 
     for trade in trades:
         if trade["id"] == trade_id and trade["status"] == "open":
-            # Get current price if not provided
             if exit_price is None:
-                price = get_current_price(trade["symbol"])
-                if price is None:
-                    print(f"❌ 無法取得即時價格，請指定 exit_price")
+                try:
+                    exit_price = get_price(trade["symbol"])
+                except ValueError as e:
+                    print(f"❌ 無法取得即時價格: {e}")
+                    print(f"   請指定 exit_price，例如: --exit 50000")
                     return False
-                exit_price = price
 
-            # Calculate PnL
+            # Calculate PnL with leverage
             if trade["side"] == "LONG":
                 pnl_pct = (exit_price - trade["entry_price"]) / trade["entry_price"]
             else:
                 pnl_pct = (trade["entry_price"] - exit_price) / trade["entry_price"]
 
-            pnl_usdt = pnl_pct * trade["position_size_usdt"]
+            pnl_with_leverage = pnl_pct * trade["leverage"]
+            pnl_usdt = pnl_pct * trade["position_notional_usdt"]
+            # But actual loss is capped at risk if SL was hit
+            if reason == "stop_loss":
+                pnl_usdt = max(pnl_usdt, -trade["risk_usdt"])
+                pnl_with_leverage = pnl_usdt / trade["position_notional_usdt"]
 
             trade["status"] = "closed"
             trade["closed_at"] = datetime.now(CST).isoformat()
             trade["exit_price"] = exit_price
             trade["realized_pnl_usdt"] = round(pnl_usdt, 2)
-            trade["realized_pnl_pct"] = round(pnl_pct * 100, 2)
+            trade["realized_pnl_pct"] = round(pnl_with_leverage * 100, 2)
             trade["exit_reason"] = reason
 
             # Update stats
@@ -161,52 +323,73 @@ def close_trade(trade_id, exit_price=None, reason="manual"):
                 trades_data["stats"]["losing_trades"] += 1
 
             save_trades(trades_data)
+            update_available_balance()
 
             emoji = "✅" if pnl_usdt > 0 else "❌"
             print(f"{emoji} 平倉成功:")
             print(f"   ID:     {trade['id']}")
+            print(f"   標的:   {trade['symbol']}")
             print(f"   出場價: {exit_price}")
-            print(f"   損益:   {'+' if pnl_usdt >= 0 else ''}{pnl_usdt:.2f} USDT ({pnl_pct*100:+.2f}%)")
+            print(f"   損益:   {'+' if pnl_usdt >= 0 else ''}{pnl_usdt:.2f} USDT ({pnl_with_leverage*100:+.2f}%)")
+            print(f"   槓桿:   {trade['leverage']}x")
             print(f"   原因:   {reason}")
+            print(f"   可用餘額: {update_available_balance():.2f} USDT")
             return True
 
     print(f"❌ 找不到持倉中的交易: {trade_id}")
     return False
 
+
 def list_trades():
     trades_data = load_trades()
     trades = trades_data["trades"]
+    available = update_available_balance()
 
     if not trades:
         print("📭 尚無交易記錄")
+        print(f"\n💰 本金: 300 USDT | 可用: {available:.2f} USDT")
         return
 
     open_trades = [t for t in trades if t["status"] == "open"]
     closed_trades = [t for t in trades if t["status"] == "closed"]
 
-    print(f"📊 總交易: {len(trades)} | 持倉: {len(open_trades)} | 已平倉: {len(closed_trades)}")
-    print(f"   已實現 PnL: {trades_data['stats']['total_realized_pnl_usdt']:+.2f} USDT")
+    cfg = load_config()
+    initial = cfg['account']['initial_balance_usdt']
+    realized = trades_data['stats']['total_realized_pnl_usdt']
+    unrealized = trades_data['stats']['total_unrealized_pnl_usdt']
+    total_equity = initial + realized + unrealized
+
     total = trades_data['stats']['winning_trades'] + trades_data['stats']['losing_trades']
-    if total > 0:
-        win_rate = trades_data['stats']['winning_trades'] / total * 100
-        print(f"   勝率: {trades_data['stats']['winning_trades']}/{total} ({win_rate:.0f}%)")
+    win_rate = f"{trades_data['stats']['winning_trades']}/{total} ({trades_data['stats']['winning_trades']/total*100:.0f}%)" if total > 0 else "0/0"
+
+    print(f"{'='*60}")
+    print(f"  📊 Hermes 紙交易帳戶")
+    print(f"{'='*60}")
+    print(f"  初始本金:  {initial:.0f} USDT")
+    print(f"  已實現 PnL: {realized:+.2f} USDT")
+    print(f"  未實現 PnL: {unrealized:+.2f} USDT")
+    print(f"  總權益:    {total_equity:.2f} USDT")
+    print(f"  可用餘額:  {available:.2f} USDT")
+    print(f"  勝率:      {win_rate}")
+    print(f"  總交易:    {trades_data['stats']['total_trades']} | 持倉: {len(open_trades)} | 已平倉: {len(closed_trades)}")
+    print(f"{'='*60}")
 
     if open_trades:
         print(f"\n📈 持倉中:")
-        print(f"{'ID':<35} {'幣種':<12} {'方向':<6} {'進場':<12} {'浮動 PnL':<12} {'最大漲幅':<12} {'最大回撤':<12}")
-        print("-" * 100)
+        header = f"{'ID':<35} {'標的':<14} {'方向':<4} {'槓桿':<4} {'進場':<14} {'浮動 PnL':<14} {'最大漲幅':<10} {'最大回撤':<10}"
+        print(header)
+        print("-" * len(header))
         for t in open_trades:
-            price = get_current_price(t["symbol"])
-            if price:
+            try:
+                price = get_price(t["symbol"])
                 if t["side"] == "LONG":
-                    upnl_pct = (price - t["entry_price"]) / t["entry_price"]
+                    upnl_pct = (price - t["entry_price"]) / t["entry_price"] * t.get("leverage", 1)
                 else:
-                    upnl_pct = (t["entry_price"] - price) / t["entry_price"]
-                upnl_usdt = upnl_pct * t["position_size_usdt"]
+                    upnl_pct = (t["entry_price"] - price) / t["entry_price"] * t.get("leverage", 1)
+                upnl_usdt = upnl_pct * t["position_notional_usdt"]
                 t["unrealized_pnl_usdt"] = round(upnl_usdt, 2)
                 t["unrealized_pnl_pct"] = round(upnl_pct * 100, 2)
 
-                # Track max/min
                 if upnl_usdt > t.get("max_unrealized_pnl_usdt", 0):
                     t["max_unrealized_pnl_usdt"] = round(upnl_usdt, 2)
                     t["max_unrealized_pnl_pct"] = round(upnl_pct * 100, 2)
@@ -214,17 +397,30 @@ def list_trades():
                     t["min_unrealized_pnl_usdt"] = round(upnl_usdt, 2)
                     t["min_unrealized_pnl_pct"] = round(upnl_pct * 100, 2)
 
+                save_trades(trades_data)
+            except:
+                upnl_usdt = 0
+                upnl_pct = 0
+
             side_emoji = "📈" if t["side"] == "LONG" else "📉"
-            upnl_str = f"{t['unrealized_pnl_usdt']:+.2f}" if t.get('unrealized_pnl_usdt') else "N/A"
-            max_str = f"{t.get('max_unrealized_pnl_pct', 0):+.1f}%" if t.get('max_unrealized_pnl_pct') else "N/A"
-            min_str = f"{t.get('min_unrealized_pnl_pct', 0):+.1f}%" if t.get('min_unrealized_pnl_pct') else "N/A"
-            print(f"{t['id'][:33]:<35} {t['symbol']:<12} {side_emoji:<6} {t['entry_price']:<12} {upnl_str:<12} {max_str:<12} {min_str:<12}")
+            emoji_str = f"{side_emoji:<4}"
+            lev_str = f"{t.get('leverage', 1)}x"
+            upnl_str = f"{t.get('unrealized_pnl_usdt', 0):+.2f}"
+            max_str = f"{t.get('max_unrealized_pnl_pct', 0):+.1f}%"
+            min_str = f"{t.get('min_unrealized_pnl_pct', 0):+.1f}%"
+            print(f"{t['id'][:33]:<35} {t['symbol']:<14} {emoji_str} {lev_str:<4} {t['entry_price']:<14} {upnl_str:<14} {max_str:<10} {min_str:<10}")
+
+        # Total unrealized
+        total_u = sum(t.get("unrealized_pnl_usdt", 0) for t in open_trades)
+        trades_data["stats"]["total_unrealized_pnl_usdt"] = round(total_u, 2)
+        save_trades(trades_data)
+        print(f"\n  持倉浮動合計: {total_u:+.2f} USDT")
 
     if closed_trades:
-        print(f"\n📜 已平倉:")
-        for t in closed_trades[-5:]:
+        print(f"\n📜 最近平倉:")
+        for t in closed_trades[-5:][::-1]:
             emoji = "✅" if t["realized_pnl_usdt"] > 0 else "❌"
-            print(f"  {emoji} {t['id']} | {t['symbol']} | {t['realized_pnl_usdt']:+.2f} USDT ({t['realized_pnl_pct']:+.2f}%) | {t['exit_reason']}")
+            print(f"  {emoji} {t['symbol']:14s} | {t['realized_pnl_usdt']:+.2f} USDT ({t['realized_pnl_pct']:+.2f}%) | {t['exit_reason']} | {t['closed_at'][:16]}")
 
 
 def update_prices():
@@ -236,32 +432,39 @@ def update_prices():
         if trade["status"] != "open":
             continue
 
-        price = get_current_price(trade["symbol"])
-        if price is None:
+        try:
+            price = get_price(trade["symbol"])
+        except ValueError:
             continue
 
+        lev = trade.get("leverage", 1)
         if trade["side"] == "LONG":
-            pnl_pct = (price - trade["entry_price"]) / trade["entry_price"]
+            pnl_pct = (price - trade["entry_price"]) / trade["entry_price"] * lev
         else:
-            pnl_pct = (trade["entry_price"] - price) / trade["entry_price"]
+            pnl_pct = (trade["entry_price"] - price) / trade["entry_price"] * lev
 
-        pnl_usdt = pnl_pct * trade["position_size_usdt"]
+        pnl_usdt = pnl_pct * trade["position_notional_usdt"] / lev  # actual pnl = pct * notional / lev
+        # Actually: pnl_pct is already leverage-adjusted
+        # pnl_usdt should be: (price_change_pct) * notional
+        price_change_pct = (price - trade["entry_price"]) / trade["entry_price"]
+        if trade["side"] == "SHORT":
+            price_change_pct = -price_change_pct
+        pnl_usdt = price_change_pct * trade["position_notional_usdt"]
+
         trade["unrealized_pnl_usdt"] = round(pnl_usdt, 2)
-        trade["unrealized_pnl_pct"] = round(pnl_pct * 100, 2)
+        trade["unrealized_pnl_pct"] = round(pnl_pct, 2)
 
-        # Track max profit and max drawdown
         if pnl_usdt > trade.get("max_unrealized_pnl_usdt", 0):
             trade["max_unrealized_pnl_usdt"] = round(pnl_usdt, 2)
-            trade["max_unrealized_pnl_pct"] = round(pnl_pct * 100, 2)
+            trade["max_unrealized_pnl_pct"] = round(pnl_pct, 2)
         if pnl_usdt < trade.get("min_unrealized_pnl_usdt", 0):
             trade["min_unrealized_pnl_usdt"] = round(pnl_usdt, 2)
-            trade["min_unrealized_pnl_pct"] = round(pnl_pct * 100, 2)
+            trade["min_unrealized_pnl_pct"] = round(pnl_pct, 2)
 
-    # Calculate total unrealized
     unrealized = sum(t.get("unrealized_pnl_usdt", 0) for t in trades if t["status"] == "open")
     trades_data["stats"]["total_unrealized_pnl_usdt"] = round(unrealized, 2)
-
     save_trades(trades_data)
+    update_available_balance()
     return trades_data
 
 
@@ -276,59 +479,58 @@ def check_tp_sl():
         if trade["status"] != "open":
             continue
 
-        symbol = trade["symbol"]
-        price = get_current_price(symbol)
-        if price is None:
+        try:
+            price = get_price(trade["symbol"])
+        except ValueError:
             continue
 
         # Check stop loss
         if trade["side"] == "LONG" and price <= trade["stop_loss"]:
-            print(f"🔴 停損觸發 {symbol}: {price} <= {trade['stop_loss']}")
+            print(f"🔴 停損觸發 {trade['symbol']}: {price} <= {trade['stop_loss']}")
             close_trade(trade["id"], exit_price=price, reason="stop_loss")
             closed_ids.append(trade["id"])
             continue
         elif trade["side"] == "SHORT" and price >= trade["stop_loss"]:
-            print(f"🔴 停損觸發 {symbol}: {price} >= {trade['stop_loss']}")
+            print(f"🔴 停損觸發 {trade['symbol']}: {price} >= {trade['stop_loss']}")
             close_trade(trade["id"], exit_price=price, reason="stop_loss")
             closed_ids.append(trade["id"])
             continue
 
         # Check take profit 2
-        if trade["take_profit_2"]:
+        if trade.get("take_profit_2"):
             if trade["side"] == "LONG" and price >= trade["take_profit_2"]:
-                print(f"🟢 停利 2 觸發 {symbol}: {price} >= {trade['take_profit_2']}")
+                print(f"🟢 停利 2 觸發 {trade['symbol']}: {price} >= {trade['take_profit_2']}")
                 trade["take_profit_2_hit"] = True
-                close_trade(trade["id"], exit_price=price, reason="take_profit_2")
+                close_trade(trade["id"], exit_price=trade["take_profit_2"], reason="take_profit_2")
                 closed_ids.append(trade["id"])
                 continue
             elif trade["side"] == "SHORT" and price <= trade["take_profit_2"]:
-                print(f"🟢 停利 2 觸發 {symbol}: {price} <= {trade['take_profit_2']}")
+                print(f"🟢 停利 2 觸發 {trade['symbol']}: {price} <= {trade['take_profit_2']}")
                 trade["take_profit_2_hit"] = True
-                close_trade(trade["id"], exit_price=price, reason="take_profit_2")
+                close_trade(trade["id"], exit_price=trade["take_profit_2"], reason="take_profit_2")
                 closed_ids.append(trade["id"])
                 continue
 
         # Check take profit 1 (if TP2 not set)
-        if trade["take_profit_1"] and not trade["take_profit_2"]:
+        if trade.get("take_profit_1") and not trade.get("take_profit_2"):
             if trade["side"] == "LONG" and price >= trade["take_profit_1"]:
-                print(f"🟢 停利 1 觸發 {symbol}: {price} >= {trade['take_profit_1']}")
+                print(f"🟢 停利 1 觸發 {trade['symbol']}: {price} >= {trade['take_profit_1']}")
                 trade["take_profit_1_hit"] = True
-                close_trade(trade["id"], exit_price=price, reason="take_profit_1")
+                close_trade(trade["id"], exit_price=trade["take_profit_1"], reason="take_profit_1")
                 closed_ids.append(trade["id"])
                 continue
             elif trade["side"] == "SHORT" and price <= trade["take_profit_1"]:
-                print(f"🟢 停利 1 觸發 {symbol}: {price} <= {trade['take_profit_1']}")
+                print(f"🟢 停利 1 觸發 {trade['symbol']}: {price} <= {trade['take_profit_1']}")
                 trade["take_profit_1_hit"] = True
-                close_trade(trade["id"], exit_price=price, reason="take_profit_1")
+                close_trade(trade["id"], exit_price=trade["take_profit_1"], reason="take_profit_1")
                 closed_ids.append(trade["id"])
                 continue
 
         # Check time stop
-        from datetime import datetime
         opened = datetime.fromisoformat(trade["opened_at"])
         days_old = (datetime.now(CST) - opened).days
         if days_old >= 7:
-            print(f"⏰ 時間停損觸發 {symbol}: 持倉 {days_old} 天")
+            print(f"⏰ 時間停損觸發 {trade['symbol']}: 持倉 {days_old} 天")
             close_trade(trade["id"], exit_price=price, reason="time_stop")
             trade["time_stop_expired"] = True
             closed_ids.append(trade["id"])
@@ -337,43 +539,84 @@ def check_tp_sl():
     return closed_ids
 
 
+def show_balance():
+    """Show account balance details."""
+    cfg = load_config()
+    trades_data = load_trades()
+    available = update_available_balance()
+
+    print(f"💰 Hermes 紙交易帳戶")
+    print(f"{'='*40}")
+    print(f"  初始本金:   {cfg['account']['initial_balance_usdt']:.0f} USDT")
+    print(f"  已實現 PnL:  {trades_data['stats']['total_realized_pnl_usdt']:+.2f} USDT")
+    print(f"  未實現 PnL:  {trades_data['stats']['total_unrealized_pnl_usdt']:+.2f} USDT")
+    print(f"  可用餘額:   {available:.2f} USDT")
+    print(f"  最大槓桿:   {cfg['account']['max_leverage']}x")
+    print(f"  單筆最大風險: {cfg['account']['max_risk_per_trade']} USDT")
+
+
+def show_price(symbol):
+    """Show live price for a symbol."""
+    try:
+        price = get_price(symbol)
+        market = "🪙 加密" if 'USDT' in symbol else ("🇹🇼 台股" if '.TW' in symbol else "🇺🇸 美股")
+        print(f"{market} {symbol}: ${price}")
+        return price
+    except ValueError as e:
+        print(f"❌ {e}")
+        return None
+
+
+# ═══════════════════════════════════════════════
+# CLI
+# ═══════════════════════════════════════════════
+
 def main():
-    parser = argparse.ArgumentParser(description="Hermes 主動紙交易 CLI")
+    parser = argparse.ArgumentParser(description="Hermes 主動紙交易 CLI v2")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # Long
-    long_parser = subparsers.add_parser("long", help="做多")
-    long_parser.add_argument("symbol", help="幣種 (e.g. BTCUSDT)")
-    long_parser.add_argument("--entry", "-e", required=True, type=float)
-    long_parser.add_argument("--sl", "-s", required=True, type=float, help="停損價")
-    long_parser.add_argument("--tp1", type=float, help="停利 1")
-    long_parser.add_argument("--tp2", type=float, help="停利 2")
-    long_parser.add_argument("--risk", "-r", type=float, default=10, help="風險 USDT (default: 10)")
-    long_parser.add_argument("--notes", "-n", help="備註")
+    p = subparsers.add_parser("long", help="做多")
+    p.add_argument("symbol")
+    p.add_argument("--entry", "-e", required=True, type=float)
+    p.add_argument("--sl", "-s", required=True, type=float)
+    p.add_argument("--tp1", type=float)
+    p.add_argument("--tp2", type=float)
+    p.add_argument("--risk", "-r", type=float, default=10)
+    p.add_argument("--leverage", "-l", type=int, default=1, help="槓桿倍數 (1-5, default: 1)")
+    p.add_argument("--notes", "-n")
 
     # Short
-    short_parser = subparsers.add_parser("short", help="做空")
-    short_parser.add_argument("symbol", help="幣種 (e.g. BTCUSDT)")
-    short_parser.add_argument("--entry", "-e", required=True, type=float)
-    short_parser.add_argument("--sl", "-s", required=True, type=float, help="停損價")
-    short_parser.add_argument("--tp1", type=float, help="停利 1")
-    short_parser.add_argument("--tp2", type=float, help="停利 2")
-    short_parser.add_argument("--risk", "-r", type=float, default=10, help="風險 USDT (default: 10)")
-    short_parser.add_argument("--notes", "-n", help="備註")
+    p = subparsers.add_parser("short", help="做空")
+    p.add_argument("symbol")
+    p.add_argument("--entry", "-e", required=True, type=float)
+    p.add_argument("--sl", "-s", required=True, type=float)
+    p.add_argument("--tp1", type=float)
+    p.add_argument("--tp2", type=float)
+    p.add_argument("--risk", "-r", type=float, default=10)
+    p.add_argument("--leverage", "-l", type=int, default=1, help="槓桿倍數 (1-5, default: 1)")
+    p.add_argument("--notes", "-n")
 
     # Close
-    close_parser = subparsers.add_parser("close", help="平倉")
-    close_parser.add_argument("trade_id", help="交易 ID")
-    close_parser.add_argument("--exit", type=float, help="出場價格 (預設: 即時價格)")
+    p = subparsers.add_parser("close", help="平倉")
+    p.add_argument("trade_id")
+    p.add_argument("--exit", type=float)
 
     # List
     subparsers.add_parser("list", help="列出所有交易")
 
+    # Balance
+    subparsers.add_parser("balance", help="顯示帳戶餘額")
+
+    # Price
+    p = subparsers.add_parser("price", help="查詢即時價格")
+    p.add_argument("symbol")
+
     # Check TP/SL
     subparsers.add_parser("check", help="檢查所有持倉的 TP/SL")
 
-    # Update prices
-    subparsers.add_parser("update", help="更新所有持倉的浮動損益")
+    # Update
+    subparsers.add_parser("update", help="更新浮動損益")
 
     args = parser.parse_args()
 
@@ -384,6 +627,10 @@ def main():
         return close_trade(args.trade_id, exit_price=args.exit)
     elif args.command == "list":
         return list_trades()
+    elif args.command == "balance":
+        return show_balance()
+    elif args.command == "price":
+        return show_price(args.symbol)
     elif args.command == "check":
         closed = check_tp_sl()
         if closed:
@@ -395,6 +642,7 @@ def main():
         update_prices()
         print("✅ 浮動損益已更新")
         return True
+
 
 if __name__ == "__main__":
     main()

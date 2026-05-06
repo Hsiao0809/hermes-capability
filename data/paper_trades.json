@@ -27,7 +27,10 @@
       "time_stop_expired": false,
       "exit_reason": "manual",
       "notes": "測試第一筆主動紙交易",
-      "exit_price": 81614.0
+      "exit_price": 81614.0,
+      "leverage": 1,
+      "position_notional_usdt": 811.0,
+      "asset_type": "crypto"
     },
     {
       "id": "PT-20260506-120020-BTCUSDT",
@@ -56,7 +59,10 @@
       "time_stop_expired": false,
       "exit_reason": "manual",
       "notes": "BTC pullback to 81K support, morning analysis said 80K-80.7K support zone. R:R = 1:2 for TP2",
-      "exit_price": 81593.0
+      "exit_price": 81593.0,
+      "leverage": 1,
+      "position_notional_usdt": 1620.0,
+      "asset_type": "crypto"
     },
     {
       "id": "PT-20260506-120100-STORJUSDT",
@@ -84,12 +90,15 @@
       "stop_loss_hit": false,
       "time_stop_expired": false,
       "exit_reason": null,
-      "notes": "STORJ momentum continuation. +44% 24h, volume surging. 15m consolidation. Entry at $0.138. SL -4.8% at $0.1314."
+      "notes": "STORJ momentum continuation. +44% 24h, volume surging. 15m consolidation. Entry at $0.138. SL -4.8% at $0.1314.",
+      "leverage": 1,
+      "position_notional_usdt": 209.09,
+      "asset_type": "crypto"
     }
   ],
   "stats": {
     "total_realized_pnl_usdt": 17.0,
-    "total_unrealized_pnl_usdt": 5.14,
+    "total_unrealized_pnl_usdt": 0.0,
     "max_drawdown_usdt": 0.0,
     "total_trades": 3,
     "winning_trades": 2,

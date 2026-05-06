@@ -54,6 +54,8 @@ def generate():
             "total_trades": trades_data["stats"]["total_trades"],
             "open_count": len(open_trades),
             "closed_count": len(closed_trades),
+            "initial_balance": cfg["account"]["initial_balance_usdt"],
+            "available_balance": cfg["account"]["available_balance_usdt"],
             "realized_pnl": trades_data["stats"]["total_realized_pnl_usdt"],
             "unrealized_pnl": trades_data["stats"]["total_unrealized_pnl_usdt"],
             "winning_trades": trades_data["stats"]["winning_trades"],

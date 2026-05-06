@@ -1,11 +1,15 @@
 {
   "account": {
-    "paper_balance_usdt": 1000,
+    "initial_balance_usdt": 300,
+    "paper_balance_usdt": 317.0,
+    "available_balance_usdt": 307.0,
     "max_risk_per_trade": 10,
     "max_positions": 5,
     "default_stop_loss_pct": 5.0,
     "default_take_profit_1_pct": 10.0,
     "default_take_profit_2_pct": 20.0,
+    "default_leverage": 1,
+    "max_leverage": 5,
     "time_stop_days": 7
   },
   "order_task": {
