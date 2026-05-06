@@ -10,10 +10,9 @@ trade.py — Hermes 主動紙交易 CLI v2
   python3 trade.py balance
   python3 trade.py price SYMBOL
 
-支援標的格式：
-  - 加密貨幣：BTCUSDT, ETHUSDT, STORJUSDT (Binance)
-  - 台股：2330.TW (台積電), 2454.TW (聯發科), 2317.TW (鴻海)
-  - 美股：AAPL, TSLA, NVDA
+支援標的格式（Binance USDⓈ-M Futures）：
+  - 加密貨幣：BTCUSDT, ETHUSDT, STORJUSDT
+  - TradFi 美股：COINUSDT, NVDAUSDT, TSLAUSDT, MSTRUSDT, AAPLUSDT, MSFTUSDT 等
 
 本金：300 USDT 初始（無槓桿預設，可開到 5x）
 """
@@ -40,36 +39,37 @@ os.makedirs(DATA_DIR, exist_ok=True)
 # ═══════════════════════════════════════════════
 
 def get_price(symbol):
-    """Fetch live price for any supported symbol type."""
+    """Fetch live price for any supported symbol type.
+    
+    All symbols are Binance USDⓈ-M futures:
+    - Crypto: BTCUSDT, ETHUSDT, STORJUSDT
+    - TradFi (TRADIFI_PERPETUAL): COINUSDT, NVDAUSDT, TSLAUSDT, MSTRUSDT, etc.
+    """
     symbol = symbol.upper().strip()
-
-    # Binance crypto
-    if symbol.endswith('USDT') or symbol in ['BTCUSDT', 'ETHUSDT', 'BNBUSDT']:
-        return get_binance_price(symbol)
-
-    # Taiwan stock: 2330.TW -> fetch from twse or yahoo
-    if '.TW' in symbol:
-        return get_tw_stock_price(symbol)
-
-    # US stock: plain ticker
-    if re.match(r'^[A-Z]{1,5}$', symbol):
-        return get_us_stock_price(symbol)
-
-    # Try Binance as fallback
-    return get_binance_price(symbol)
+    
+    # Binance futures API (unified — covers both crypto and TradFi)
+    return get_binance_futures_price(symbol)
 
 
-def get_binance_price(symbol):
-    """Fetch crypto price from Binance public API."""
+def get_binance_futures_price(symbol):
+    """Fetch price from Binance USDⓈ-M Futures public API."""
+    # Ensure USDT suffix
     if not symbol.endswith('USDT'):
         symbol = symbol + 'USDT'
     try:
-        url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
+        url = f"https://fapi.binance.com/fapi/v1/ticker/price?symbol={symbol}"
         with urllib.request.urlopen(url, timeout=10) as resp:
             data = json.loads(resp.read())
             return float(data['price'])
     except Exception as e:
-        raise ValueError(f"Binance price fetch failed for {symbol}: {e}")
+        # Fallback to spot API for spot-only pairs
+        try:
+            url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}"
+            with urllib.request.urlopen(url, timeout=10) as resp:
+                data = json.loads(resp.read())
+                return float(data['price'])
+        except Exception:
+            raise ValueError(f"Binance price fetch failed for {symbol}: {e}")
 
 
 def get_tw_stock_price(symbol):
@@ -232,7 +232,7 @@ def open_trade(args):
         "position_size": round(position_size, 6),
         "position_notional_usdt": round(position_notional, 2),
         "risk_usdt": risk_usdt,
-        "asset_type": "crypto" if 'USDT' in symbol else ("tw_stock" if '.TW' in symbol else "us_stock"),
+        "asset_type": "crypto",
         "status": "open",
         "opened_at": datetime.now(CST).isoformat(),
         "closed_at": None,
@@ -256,8 +256,10 @@ def open_trade(args):
     save_trades(trades_data)
     update_available_balance()
 
-    # Classify market type for display
-    market_type = "🪙 加密" if 'USDT' in symbol else ("🇹🇼 台股" if '.TW' in symbol else "🇺🇸 美股")
+    # Classify for display
+    is_tradifi = symbol in ['COINUSDT', 'NVDAUSDT', 'TSLAUSDT', 'MSTRUSDT', 'AAPLUSDT', 
+                            'MSFTUSDT', 'AMZNUSDT', 'METAUSDT', 'GOOGLUSDT', 'HOODUSDT']
+    market_type = "🏢 TradFi" if is_tradifi else "🪙 加密"
 
     print(f"✅ 開單成功:")
     print(f"   ID:     {trade_id}")
