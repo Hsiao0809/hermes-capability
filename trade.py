@@ -258,18 +258,21 @@ def open_trade(args):
     save_trades(trades_data)
     update_available_balance()
 
-    # Classify for display — Binance TRADIFI_PERPETUAL includes:
-    # Stocks: AAPL, AMZN, AVGO, BABA, COIN, CRCL, GOOGL, HOOD, INTC, META, MSFT, MSTR, MU, NVDA, PAYP, PLTR, TSLA, TSM, SNDK
-    # ETFs: QQQ, SPY, EWY, EWJ
-    # Commodities: CL, BZ, NATGAS, XAU, XAG, XPT, XPD, COPPER
-    # Pending: AMD, QCOM, USAR
-    tradifi_keywords = ['COIN', 'NVDA', 'TSLA', 'MSTR', 'AAPL', 'MSFT', 'AMZN', 'META', 
-                         'GOOGL', 'HOOD', 'MU', 'PLTR', 'AVGO', 'BABA', 'INTC', 'PAYP', 
-                         'CRCL', 'TSM', 'SNDK',
-                         'QQQ', 'SPY', 'EWY', 'EWJ', 'AMD', 'QCOM',
-                         'CL', 'BZ', 'NATGAS', 'XAU', 'XAG', 'XPT', 'XPD', 'COPPER']
+    # Classify for display — Binance USDⓈ-M Futures TradFi:
+    # Stocks (19): AAPL, AMZN, AVGO, BABA, COIN, CRCL, GOOGL, HOOD, INTC, META, 
+    #              MSFT, MSTR, MU, NVDA, PAYP, PLTR, TSLA, TSM, SNDK
+    # ETFs (4): QQQ, SPY, EWY, EWJ
+    # Commodities (8): XAU, XAG, CL, BZ, NATGAS, COPPER, XPT, XPD
+    # Pending (3): AMD, QCOM, USAR
+    TRADIFI_SYMBOLS = {
+        'AAPL', 'AMZN', 'AVGO', 'BABA', 'COIN', 'CRCL', 'GOOGL', 'HOOD', 'INTC',
+        'META', 'MSFT', 'MSTR', 'MU', 'NVDA', 'PAYP', 'PLTR', 'TSLA', 'TSM', 'SNDK',
+        'QQQ', 'SPY', 'EWY', 'EWJ',
+        'XAU', 'XAG', 'CL', 'BZ', 'NATGAS', 'COPPER', 'XPT', 'XPD',
+        'AMD', 'QCOM', 'USAR'
+    }
     base = symbol.replace('USDT', '')
-    market_type = "🏢 TradFi" if base in tradifi_keywords else "🪙 加密"
+    market_type = "🏢 TradFi" if base in TRADIFI_SYMBOLS else "🪙 加密"
 
     print(f"✅ 開單成功:")
     print(f"   ID:     {trade_id}")
