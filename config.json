@@ -9,11 +9,11 @@
     "time_stop_days": 7
   },
   "order_task": {
-    "active": false,
-    "food": null,
-    "target_usdt": null,
-    "deadline": null,
-    "started_at": null
+    "active": true,
+    "food": "王品牛排經典盛宴套餐",
+    "target_usdt": 55,
+    "deadline": "2026-05-06T16:01:15.478947+08:00",
+    "started_at": "2026-05-06T12:01:15.478969+08:00"
   },
   "data_dir": "data"
 }
