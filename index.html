@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hermes Agent 能力儀表板</title>
+<style>
+  :root { --bg: #0d1117; --card: #161b22; --border: #30363d; --text: #e6edf3; --text-muted: #8b949e; --green: #3fb950; --red: #f85149; --blue: #58a6ff; --yellow: #d29922; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
+  .container { max-width: 960px; margin: 0 auto; padding: 20px; }
+  h1 { font-size: 24px; margin-bottom: 4px; }
+  .subtitle { color: var(--text-muted); font-size: 14px; margin-bottom: 20px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .card h2 { font-size: 14px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+  .stat-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; }
+  .stat-label { color: var(--text-muted); font-size: 13px; }
+  .stat-value { font-size: 13px; font-weight: 600; }
+  .positive { color: var(--green); }
+  .negative { color: var(--red); }
+  .neutral { color: var(--yellow); }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 11px; font-weight: 600; }
+  .badge-open { background: #1a3a1a; color: var(--green); }
+  .badge-closed { background: #1a1a2e; color: var(--blue); }
+  .badge-long { background: #1a3a1a; color: var(--green); }
+  .badge-short { background: #3a1a1a; color: var(--red); }
+  .badge-active { background: #1a3a1a; color: var(--green); }
+  .badge-idle { background: #2d2d1a; color: var(--yellow); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--text-muted); font-weight: 600; padding: 8px; border-bottom: 1px solid var(--border); }
+  td { padding: 8px; border-bottom: 1px solid var(--border); }
+  .loading { text-align: center; padding: 40px; color: var(--text-muted); }
+  .loading::after { content: '...'; animation: dots 1.5s infinite; }
+  @keyframes dots { 0%,20% { content: '.'; } 40% { content: '..'; } 60%,100% { content: '...'; } }
+  .last-updated { font-size: 12px; color: var(--text-muted); text-align: center; margin-top: 20px; padding: 10px; border-top: 1px solid var(--border); }
+  /* Modal-like task alert */
+  .task-banner { background: linear-gradient(135deg, #1a3a1a 0%, #0d1117 100%); border: 1px solid var(--green); padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; }
+  .task-banner .timer { font-size: 18px; font-weight: 700; color: var(--green); }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>🤖 Hermes Agent</h1>
+  <p class="subtitle" id="subtitle">載入中...</p>
+
+  <!-- Order Task Banner -->
+  <div id="task-banner" style="display:none;" class="task-banner">
+    <div>
+      <strong>🎯 點餐任務進行中</strong><br>
+      <span id="task-food">牛排</span> — 目標: <span id="task-target">0</span> USDT
+    </div>
+    <div class="timer" id="task-timer">--:--</div>
+  </div>
+
+  <!-- Summary Cards -->
+  <div class="grid" id="summary-cards"></div>
+
+  <!-- Open Positions -->
+  <div class="card" style="margin-bottom: 12px;">
+    <h2>📈 持倉中</h2>
+    <div id="positions-table"><div class="loading">載入中</div></div>
+  </div>
+
+  <!-- Recent Closed -->
+  <div class="card" style="margin-bottom: 12px;">
+    <h2>📜 最近平倉</h2>
+    <div id="closed-table"><div class="loading">載入中</div></div>
+  </div>
+
+  <!-- Predictions -->
+  <div class="card">
+    <h2>🔮 預測記錄</h2>
+    <div id="predictions-section"><div class="loading">載入中</div></div>
+  </div>
+
+  <div class="last-updated" id="last-updated"></div>
+</div>
+
+<script>
+async function loadSummary() {
+  const resp = await fetch('data/summary.json');
+  return await resp.json();
+}
+
+function formatPnl(value) {
+  if (value === null || value === undefined) return '--';
+  const prefix = value >= 0 ? '+' : '';
+  return `<span class="${value >= 0 ? 'positive' : 'negative'}">${prefix}${value.toFixed(2)}</span>`;
+}
+
+function formatPct(value) {
+  if (value === null || value === undefined) return '--';
+  const prefix = value >= 0 ? '+' : '';
+  return `<span class="${value >= 0 ? 'positive' : 'negative'}">${prefix}${value.toFixed(2)}%</span>`;
+}
+
+function updateTaskTimer(deadline) {
+  const now = new Date();
+  const end = new Date(deadline);
+  const diff = Math.max(0, end - now);
+  const h = Math.floor(diff / 3600000);
+  const m = Math.floor((diff % 3600000) / 60000);
+  const s = Math.floor((diff % 60000) / 1000);
+  document.getElementById('task-timer').textContent = `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+}
+
+async function render() {
+  const data = await loadSummary();
+  document.getElementById('subtitle').textContent = `最後更新: ${data.updated_at}`;
+
+  // Task banner
+  const task = data.order_task;
+  if (task.active) {
+    document.getElementById('task-banner').style.display = 'flex';
+    document.getElementById('task-food').textContent = task.food || '未知';
+    document.getElementById('task-target').textContent = task.target_usdt || 0;
+    if (task.deadline) {
+      updateTaskTimer(task.deadline);
+      setInterval(() => updateTaskTimer(task.deadline), 1000);
+    }
+  }
+
+  // Summary cards
+  const t = data.trading;
+  const total = t.winning_trades + t.losing_trades;
+  const winRate = total > 0 ? ((t.winning_trades / total) * 100).toFixed(0) : '--';
+
+  document.getElementById('summary-cards').innerHTML = `
+    <div class="card">
+      <h2>💰 已實現損益</h2>
+      <div class="stat-value" style="font-size: 24px;">${formatPnl(t.realized_pnl)} USDT</div>
+      <div class="stat-row"><span class="stat-label">總交易</span><span class="stat-value">${t.total_trades}</span></div>
+      <div class="stat-row"><span class="stat-label">勝率</span><span class="stat-value">${t.winning_trades}/${total} (${winRate}%)</span></div>
+    </div>
+    <div class="card">
+      <h2>📊 持倉</h2>
+      <div class="stat-row"><span class="stat-label">持倉中</span><span class="stat-value">${t.open_count}</span></div>
+      <div class="stat-row"><span class="stat-label">未實現 PnL</span><span class="stat-value">${formatPnl(t.unrealized_pnl)} USDT</span></div>
+      <div class="stat-row"><span class="stat-label">已平倉</span><span class="stat-value">${t.closed_count}</span></div>
+    </div>
+    <div class="card">
+      <h2>🎯 點餐任務</h2>
+      <div class="stat-row">
+        <span class="stat-label">狀態</span>
+        <span class="badge ${task.active ? 'badge-active' : 'badge-idle'}">${task.active ? '進行中' : '待命中'}</span>
+      </div>
+      <div class="stat-row"><span class="stat-label">目前目標</span><span class="stat-value">${task.active ? task.target_usdt + ' USDT' : '—'}</span></div>
+    </div>
+    <div class="card">
+      <h2>🔮 預測</h2>
+      <div class="stat-row"><span class="stat-label">總預測</span><span class="stat-value">${data.predictions.total}</span></div>
+      <div class="stat-row"><span class="stat-label">已評分</span><span class="stat-value">${data.predictions.scored}</span></div>
+      <div class="stat-row"><span class="stat-label">平均 Brier</span><span class="stat-value">${data.predictions.avg_brier !== null ? data.predictions.avg_brier.toFixed(3) : '—'}</span></div>
+    </div>
+  `;
+
+  // Open positions
+  if (t.open_positions.length === 0) {
+    document.getElementById('positions-table').innerHTML = '<div style="color: var(--text-muted); padding: 12px; text-align: center;">無持倉</div>';
+  } else {
+    let html = '<table><thead><tr><th>幣種</th><th>方向</th><th>進場</th><th>浮動 PnL</th><th>最高漲幅</th><th>最大回撤</th></tr></thead><tbody>';
+    for (const p of t.open_positions) {
+      html += `<tr>
+        <td><span class="badge ${p.side === 'LONG' ? 'badge-long' : 'badge-short'}">${p.side}</span> ${p.symbol}</td>
+        <td>${p.side === 'LONG' ? '📈 多' : '📉 空'}</td>
+        <td>${p.entry}</td>
+        <td>${formatPnl(p.current_pnl)} (${formatPct(p.current_pnl_pct)})</td>
+        <td>${formatPct(p.max_profit_pct)}</td>
+        <td>${formatPct(p.max_drawdown_pct)}</td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+    document.getElementById('positions-table').innerHTML = html;
+  }
+
+  // Recent closed
+  if (data.recent_closed.length === 0) {
+    document.getElementById('closed-table').innerHTML = '<div style="color: var(--text-muted); padding: 12px; text-align: center;">尚無已平倉交易</div>';
+  } else {
+    let html = '<table><thead><tr><th>ID</th><th>幣種</th><th>損益</th><th>原因</th></tr></thead><tbody>';
+    for (const c of data.recent_closed.reverse()) {
+      const emoji = c.pnl > 0 ? '✅' : '❌';
+      html += `<tr>
+        <td style="font-size: 11px; color: var(--text-muted);">${c.id.slice(0, 25)}</td>
+        <td>${c.symbol}</td>
+        <td>${formatPnl(c.pnl)} USDT (${formatPct(c.pnl_pct)})</td>
+        <td><span class="badge ${c.pnl > 0 ? 'badge-open' : 'badge-short'}">${emoji} ${c.reason}</span></td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+    document.getElementById('closed-table').innerHTML = html;
+  }
+
+  // Predictions
+  const p = data.predictions;
+  if (p.recent.length === 0) {
+    document.getElementById('predictions-section').innerHTML = '<div style="color: var(--text-muted); padding: 12px; text-align: center;">尚無預測記錄</div>';
+  } else {
+    let html = '<table><thead><tr><th>主題</th><th>方向</th><th>信心</th><th>結果</th><th>Brier</th></tr></thead><tbody>';
+    for (const pred of p.recent) {
+      const brierStr = pred.brier_score !== null ? pred.brier_score.toFixed(3) : '⏳';
+      html += `<tr>
+        <td>${pred.title || pred.topic || '未知'}</td>
+        <td>${pred.direction || '—'}</td>
+        <td>${pred.confidence || '—'}</td>
+        <td>${pred.outcome || '⏳'}</td>
+        <td>${brierStr}</td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+    document.getElementById('predictions-section').innerHTML = html;
+  }
+
+  // Last updated
+  document.getElementById('last-updated').textContent = `🔄 ${data.updated_at} • 自動更新中`;
+}
+
+render();
+
+// Auto-refresh every 5 minutes
+setInterval(render, 300000);
+</script>
+</body>
+</html>

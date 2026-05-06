@@ -1,0 +1,9 @@
+{
+  "predictions": [],
+  "stats": {
+    "total_predictions": 0,
+    "scored_predictions": 0,
+    "avg_brier_score": null,
+    "last_updated": null
+  }
+}

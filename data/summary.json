@@ -1,0 +1,44 @@
+{
+  "updated_at": "2026-05-06 11:33 CST",
+  "updated_at_iso": "2026-05-06T11:33:59.089292+08:00",
+  "market": {
+    "btc_price": 81614.32,
+    "eth_price": 2377.03,
+    "judgment": null
+  },
+  "trading": {
+    "total_trades": 1,
+    "open_count": 1,
+    "closed_count": 0,
+    "realized_pnl": 0.0,
+    "unrealized_pnl": 5.14,
+    "winning_trades": 0,
+    "losing_trades": 0,
+    "open_positions": [
+      {
+        "id": "PT-20260506-113353-BTCUSDT",
+        "symbol": "BTCUSDT",
+        "side": "LONG",
+        "entry": 81100.0,
+        "current_pnl": 5.14,
+        "current_pnl_pct": 0.63,
+        "max_profit_pct": 0.63,
+        "max_drawdown_pct": 0.0
+      }
+    ]
+  },
+  "predictions": {
+    "total": 0,
+    "scored": 0,
+    "avg_brier": null,
+    "recent": []
+  },
+  "order_task": {
+    "active": false,
+    "food": null,
+    "target_usdt": null,
+    "deadline": null,
+    "started_at": null
+  },
+  "recent_closed": []
+}

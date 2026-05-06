@@ -1,0 +1,19 @@
+{
+  "account": {
+    "paper_balance_usdt": 1000,
+    "max_risk_per_trade": 10,
+    "max_positions": 5,
+    "default_stop_loss_pct": 5.0,
+    "default_take_profit_1_pct": 10.0,
+    "default_take_profit_2_pct": 20.0,
+    "time_stop_days": 7
+  },
+  "order_task": {
+    "active": false,
+    "food": null,
+    "target_usdt": null,
+    "deadline": null,
+    "started_at": null
+  },
+  "data_dir": "data"
+}

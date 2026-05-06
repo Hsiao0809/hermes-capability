@@ -1,0 +1,40 @@
+{
+  "trades": [
+    {
+      "id": "PT-20260506-113353-BTCUSDT",
+      "symbol": "BTCUSDT",
+      "side": "LONG",
+      "entry_price": 81100.0,
+      "stop_loss": 80100.0,
+      "take_profit_1": 83000.0,
+      "take_profit_2": 85000.0,
+      "position_size_usdt": 811.0,
+      "risk_usdt": 10.0,
+      "status": "open",
+      "opened_at": "2026-05-06T11:33:53.301138+08:00",
+      "closed_at": null,
+      "realized_pnl_usdt": 0.0,
+      "realized_pnl_pct": 0.0,
+      "unrealized_pnl_usdt": 5.14,
+      "unrealized_pnl_pct": 0.63,
+      "max_unrealized_pnl_usdt": 5.14,
+      "max_unrealized_pnl_pct": 0.63,
+      "min_unrealized_pnl_usdt": 0.0,
+      "min_unrealized_pnl_pct": 0.0,
+      "take_profit_1_hit": false,
+      "take_profit_2_hit": false,
+      "stop_loss_hit": false,
+      "time_stop_expired": false,
+      "exit_reason": null,
+      "notes": "測試第一筆主動紙交易"
+    }
+  ],
+  "stats": {
+    "total_realized_pnl_usdt": 0.0,
+    "total_unrealized_pnl_usdt": 5.14,
+    "max_drawdown_usdt": 0.0,
+    "total_trades": 1,
+    "winning_trades": 0,
+    "losing_trades": 0
+  }
+}
