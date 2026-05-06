@@ -37,20 +37,119 @@ os.makedirs(DATA_DIR, exist_ok=True)
 
 
 # ═══════════════════════════════════════════════
+# Multi-exchange TradFi symbol database
+# ═══════════════════════════════════════════════
+
+# OKX stock tokens (category 3, SWAP): 32 live symbols
+OKX_STOCK_SYMBOLS = {
+    'AAPL', 'AMD', 'AMZN', 'ARM', 'AVGO', 'BMNR', 'COIN', 'COST', 'CRCL', 'CRWV',
+    'EWJ', 'EWY', 'GOOGL', 'HIMS', 'HOOD', 'INTC', 'IWM', 'LLY', 'META', 'MSFT',
+    'MSTR', 'MU', 'NFLX', 'NVDA', 'ORCL', 'PLTR', 'QQQ', 'SNDK', 'SPY', 'TSLA',
+    'TSM', 'USAR',
+    # Binance/ByBit perps (covered but not on OKX SWAP)
+    'BABA', 'PAYP',
+    # Commodities
+    'XAU', 'XAG', 'XPT', 'XPD', 'XCU', 'CL', 'BZ', 'NG',
+    # ByBit xStocks
+    'MCD',
+    # Pending
+    'QCOM',
+}
+
+# Crypto that we know is on OKX
+COMMON_CRYPTO = {'BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'ADA', 'AVAX', 'DOT', 'LINK', 'MATIC',
+                 'UNI', 'SHIB', 'ATOM', 'ETC', 'XLM', 'BCH', 'ALGO', 'FIL', 'APT', 'LTC',
+                 'NEAR', 'OP', 'ARB', 'SUI', 'PEPE', 'INJ', 'TIA', 'SEI', 'WIF',
+                 'STORJ', 'ZEC', 'FET', 'RNDR', 'TAO', 'RUNE', 'AAVE', 'MKR', 'COMP',
+                 'CRV', 'LDO', 'EIGEN', 'STRK', 'ZRO', 'NOT', 'DOGS', 'NEIRO', 'PNUT',
+                 'BONK', 'WLD', 'DYDX', 'AXS', 'SAND', 'MANA', 'GMT', 'GALA', 'APE',
+                 'YGG', 'BLUR', 'BEAM', 'PIXEL', 'POL', 'JTO', 'JUP', 'RAY', 'PENDLE',
+                 'BAT', 'ZIL', 'IOST', 'IOTA', 'VET', 'THETA', 'FTM', 'CFX', 'ICP',
+                 'EGLD', 'KAS', 'CORE', 'ENS', 'ALT', 'DYM', 'ZETA', 'METIS', 'TRX',
+                 'BNB', 'TON', 'NEO', 'XMR', 'DASH', 'ZEC', 'WAVES', 'OMG', 'KSM',
+                 'ANKR', 'BAND', 'NKN', 'HOT', 'CHZ', 'SNX', 'SUSHI', 'CAKE', 'KAVA',
+                 'MINA', 'FLOW', 'YFI', 'CVX', 'FXS', 'LPT', 'OCEAN', 'NMR', 'GTC',
+                 'QNT', 'KNC', 'ZRX', 'BAL', 'UMA', 'TRB', 'UFT', 'UNFI',
+                 'COTI', 'CTSI', 'DUSK', 'DENT', 'CVC', 'RLC', 'RSR',
+                 'SXP', 'WRX', 'WOO', 'XVG', 'ZEN', 'ZIL', 'ZRX'}
+
+
+# ═══════════════════════════════════════════════
 # Price fetching
 # ═══════════════════════════════════════════════
 
 def get_price(symbol):
     """Fetch live price for any supported symbol type.
     
-    All symbols are Binance USDⓈ-M futures:
-    - Crypto: BTCUSDT, ETHUSDT, STORJUSDT
-    - TradFi (TRADIFI_PERPETUAL): COINUSDT, NVDAUSDT, TSLAUSDT, MSTRUSDT, etc.
+    Sources:
+    - OKX CLI (primary): Covers all TradFi + crypto, no API key needed
+    - Binance Futures (fallback): For symbols not on OKX or if OKX CLI fails
+    
+    Symbol formats:
+    - Crypto: BTCUSDT, STORJUSDT (auto-converts to BTC-USDT for OKX)
+    - TradFi (OKX): NVDA-USDT-SWAP, AAPL-USDT-SWAP
+    - Commodities (OKX): XAU-USDT-SWAP, CL-USDT-SWAP
     """
     symbol = symbol.upper().strip()
     
-    # Binance futures API (unified — covers both crypto and TradFi)
+    # Try OKX first (covers all TradFi + crypto)
+    try:
+        return get_okx_price(symbol)
+    except Exception:
+        pass
+    
+    # Fallback: Binance Futures
     return get_binance_futures_price(symbol)
+
+
+def get_okx_price(symbol):
+    """Fetch price via OKX CLI. No API key needed."""
+    import subprocess
+    
+    # OKX symbol conversion
+    base = symbol.replace('-USDT', '').replace('USDT', '').strip()
+    
+    # Determine the correct OKX symbol format
+    if base in OKX_STOCK_SYMBOLS:
+        # TradFi stock/ETF/commodity -> SWAP format
+        okx_sym = f"{base}-USDT-SWAP"
+    elif base in COMMON_CRYPTO:
+        # Crypto -> spot format (no SWAP)
+        okx_sym = f"{base}-USDT"
+    else:
+        # Unknown: try both formats
+        okx_sym = symbol.replace('USDT', '-USDT')
+    
+    okx = os.path.expanduser('~/.hermes/node/bin/okx')
+    result = subprocess.run([okx, 'market', 'ticker', okx_sym, '--json'],
+        capture_output=True, text=True, timeout=10)
+    
+    # If first attempt fails and looks like a stock, try SWAP format
+    if result.returncode != 0 or not result.stdout.strip():
+        if base not in OKX_STOCK_SYMBOLS and base not in COMMON_CRYPTO:
+            okx_sym = f"{base}-USDT-SWAP"
+            result = subprocess.run([okx, 'market', 'ticker', okx_sym, '--json'],
+                capture_output=True, text=True, timeout=10)
+    
+    if result.returncode != 0 or not result.stdout.strip():
+        raise ValueError(f"OKX price fetch failed for {symbol}")
+    
+    data = json.loads(result.stdout)
+    if isinstance(data, dict) and 'data' in data:
+        if not data['data']:
+            raise ValueError(f"OKX returned empty data for {symbol}")
+        ticker_data = data['data'][0]
+    elif isinstance(data, list):
+        if not data:
+            raise ValueError(f"OKX returned empty list for {symbol}")
+        ticker_data = data[0]
+    else:
+        raise ValueError(f"Unexpected OKX response format for {symbol}")
+    
+    price = float(ticker_data.get('last', 0))
+    if price == 0:
+        raise ValueError(f"OKX returned zero price for {symbol}")
+    return price
 
 
 def get_binance_futures_price(symbol):
@@ -258,21 +357,9 @@ def open_trade(args):
     save_trades(trades_data)
     update_available_balance()
 
-    # Classify for display — Binance USDⓈ-M Futures TradFi:
-    # Stocks (19): AAPL, AMZN, AVGO, BABA, COIN, CRCL, GOOGL, HOOD, INTC, META, 
-    #              MSFT, MSTR, MU, NVDA, PAYP, PLTR, TSLA, TSM, SNDK
-    # ETFs (4): QQQ, SPY, EWY, EWJ
-    # Commodities (8): XAU, XAG, CL, BZ, NATGAS, COPPER, XPT, XPD
-    # Pending (3): AMD, QCOM, USAR
-    TRADIFI_SYMBOLS = {
-        'AAPL', 'AMZN', 'AVGO', 'BABA', 'COIN', 'CRCL', 'GOOGL', 'HOOD', 'INTC',
-        'META', 'MSFT', 'MSTR', 'MU', 'NVDA', 'PAYP', 'PLTR', 'TSLA', 'TSM', 'SNDK',
-        'QQQ', 'SPY', 'EWY', 'EWJ',
-        'XAU', 'XAG', 'CL', 'BZ', 'NATGAS', 'COPPER', 'XPT', 'XPD',
-        'AMD', 'QCOM', 'USAR'
-    }
+    # Classify for display — multi-exchange TradFi
     base = symbol.replace('USDT', '')
-    market_type = "🏢 TradFi" if base in TRADIFI_SYMBOLS else "🪙 加密"
+    market_type = "🏢 TradFi" if base in OKX_STOCK_SYMBOLS else "🪙 加密"
 
     print(f"✅ 開單成功:")
     print(f"   ID:     {trade_id}")
