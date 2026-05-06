@@ -11,8 +11,10 @@ trade.py — Hermes 主動紙交易 CLI v2
   python3 trade.py price SYMBOL
 
 支援標的格式（Binance USDⓈ-M Futures）：
-  - 加密貨幣：BTCUSDT, ETHUSDT, STORJUSDT
-  - TradFi 美股：COINUSDT, NVDAUSDT, TSLAUSDT, MSTRUSDT, AAPLUSDT, MSFTUSDT 等
+  - 加密貨幣：BTCUSDT, ETHUSDT, STORJUSDT 等
+  - TradFi 美股：AAPL, AMZN, AVGO, BABA, COIN, GOOGL, HOOD, INTC, META, MSFT, MSTR, MU, NVDA, PAYP, PLTR, TSLA, TSM 等
+  - TradFi ETF：QQQ, SPY, EWY, EWJ
+  - 商品：XAU（黃金）, XAG（白銀）, CL（原油）, NATGAS（天然氣）, COPPER 等
 
 本金：300 USDT 初始（無槓桿預設，可開到 5x）
 """
@@ -256,10 +258,18 @@ def open_trade(args):
     save_trades(trades_data)
     update_available_balance()
 
-    # Classify for display
-    is_tradifi = symbol in ['COINUSDT', 'NVDAUSDT', 'TSLAUSDT', 'MSTRUSDT', 'AAPLUSDT', 
-                            'MSFTUSDT', 'AMZNUSDT', 'METAUSDT', 'GOOGLUSDT', 'HOODUSDT']
-    market_type = "🏢 TradFi" if is_tradifi else "🪙 加密"
+    # Classify for display — Binance TRADIFI_PERPETUAL includes:
+    # Stocks: AAPL, AMZN, AVGO, BABA, COIN, CRCL, GOOGL, HOOD, INTC, META, MSFT, MSTR, MU, NVDA, PAYP, PLTR, TSLA, TSM, SNDK
+    # ETFs: QQQ, SPY, EWY, EWJ
+    # Commodities: CL, BZ, NATGAS, XAU, XAG, XPT, XPD, COPPER
+    # Pending: AMD, QCOM, USAR
+    tradifi_keywords = ['COIN', 'NVDA', 'TSLA', 'MSTR', 'AAPL', 'MSFT', 'AMZN', 'META', 
+                         'GOOGL', 'HOOD', 'MU', 'PLTR', 'AVGO', 'BABA', 'INTC', 'PAYP', 
+                         'CRCL', 'TSM', 'SNDK',
+                         'QQQ', 'SPY', 'EWY', 'EWJ', 'AMD', 'QCOM',
+                         'CL', 'BZ', 'NATGAS', 'XAU', 'XAG', 'XPT', 'XPD', 'COPPER']
+    base = symbol.replace('USDT', '')
+    market_type = "🏢 TradFi" if base in tradifi_keywords else "🪙 加密"
 
     print(f"✅ 開單成功:")
     print(f"   ID:     {trade_id}")
