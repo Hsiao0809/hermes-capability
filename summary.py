@@ -19,7 +19,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 
 sys.path.insert(0, BASE_DIR)
-from trade import update_prices, get_current_price, load_trades, load_config
+from trade import update_prices, get_price as get_current_price, load_trades, load_config
 
 def generate():
     cfg = load_config()

@@ -1,29 +1,31 @@
 {
-  "updated_at": "2026-05-06 11:33 CST",
-  "updated_at_iso": "2026-05-06T11:33:59.089292+08:00",
+  "updated_at": "2026-05-08 16:13 CST",
+  "updated_at_iso": "2026-05-08T16:13:13.109278+08:00",
   "market": {
-    "btc_price": 81614.32,
-    "eth_price": 2377.03,
+    "btc_price": 79731.9,
+    "eth_price": 2282.0,
     "judgment": null
   },
   "trading": {
-    "total_trades": 1,
+    "total_trades": 3,
     "open_count": 1,
-    "closed_count": 0,
-    "realized_pnl": 0.0,
-    "unrealized_pnl": 5.14,
-    "winning_trades": 0,
+    "closed_count": 2,
+    "initial_balance": 300,
+    "available_balance": 307.0,
+    "realized_pnl": 17.0,
+    "unrealized_pnl": -33.79,
+    "winning_trades": 2,
     "losing_trades": 0,
     "open_positions": [
       {
-        "id": "PT-20260506-113353-BTCUSDT",
-        "symbol": "BTCUSDT",
+        "id": "PT-20260506-120100-STORJUSDT",
+        "symbol": "STORJUSDT",
         "side": "LONG",
-        "entry": 81100.0,
-        "current_pnl": 5.14,
-        "current_pnl_pct": 0.63,
-        "max_profit_pct": 0.63,
-        "max_drawdown_pct": 0.0
+        "entry": 0.138,
+        "current_pnl": -33.79,
+        "current_pnl_pct": -0.16,
+        "max_profit_pct": 1.38,
+        "max_drawdown_pct": -0.16
       }
     ]
   },
@@ -34,11 +36,28 @@
     "recent": []
   },
   "order_task": {
-    "active": false,
-    "food": null,
-    "target_usdt": null,
-    "deadline": null,
-    "started_at": null
+    "active": true,
+    "food": "王品牛排經典盛宴套餐",
+    "target_usdt": 55,
+    "deadline": "2026-05-06T16:01:15.478947+08:00",
+    "started_at": "2026-05-06T12:01:15.478969+08:00"
   },
-  "recent_closed": []
+  "recent_closed": [
+    {
+      "id": "PT-20260506-113353-BTCUSDT",
+      "symbol": "BTCUSDT",
+      "pnl": 5.14,
+      "pnl_pct": 0.63,
+      "reason": "manual",
+      "closed_at": "2026-05-06T11:59:13.999399+08:00"
+    },
+    {
+      "id": "PT-20260506-120020-BTCUSDT",
+      "symbol": "BTCUSDT",
+      "pnl": 11.86,
+      "pnl_pct": 0.73,
+      "reason": "manual",
+      "closed_at": "2026-05-06T12:00:30.469997+08:00"
+    }
+  ]
 }
