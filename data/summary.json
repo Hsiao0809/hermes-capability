@@ -7,25 +7,35 @@
     "judgment": null
   },
   "trading": {
-    "total_trades": 3,
-    "open_count": 1,
-    "closed_count": 2,
+    "total_trades": 2,
+    "open_count": 2,
+    "closed_count": 0,
     "initial_balance": 300,
-    "available_balance": 307.0,
-    "realized_pnl": 17.0,
-    "unrealized_pnl": -33.79,
-    "winning_trades": 2,
+    "available_balance": 300.0,
+    "realized_pnl": 0,
+    "unrealized_pnl": 0,
+    "winning_trades": 0,
     "losing_trades": 0,
     "open_positions": [
       {
-        "id": "PT-20260506-120100-STORJUSDT",
-        "symbol": "STORJUSDT",
+        "id": "PT-20260509-INJUSDT",
+        "symbol": "INJUSDT",
         "side": "LONG",
-        "entry": 0.138,
-        "current_pnl": -33.79,
-        "current_pnl_pct": -0.16,
-        "max_profit_pct": 1.38,
-        "max_drawdown_pct": -0.16
+        "entry": 4.161,
+        "current_pnl": 0,
+        "current_pnl_pct": 0,
+        "max_profit_pct": 0,
+        "max_drawdown_pct": 0
+      },
+      {
+        "id": "PT-20260509-JUPUSDT",
+        "symbol": "JUPUSDT",
+        "side": "LONG",
+        "entry": 0.2233,
+        "current_pnl": 0,
+        "current_pnl_pct": 0,
+        "max_profit_pct": 0,
+        "max_drawdown_pct": 0
       }
     ]
   },
@@ -42,22 +52,5 @@
     "deadline": "2026-05-06T16:01:15.478947+08:00",
     "started_at": "2026-05-06T12:01:15.478969+08:00"
   },
-  "recent_closed": [
-    {
-      "id": "PT-20260506-113353-BTCUSDT",
-      "symbol": "BTCUSDT",
-      "pnl": 5.14,
-      "pnl_pct": 0.63,
-      "reason": "manual",
-      "closed_at": "2026-05-06T11:59:13.999399+08:00"
-    },
-    {
-      "id": "PT-20260506-120020-BTCUSDT",
-      "symbol": "BTCUSDT",
-      "pnl": 11.86,
-      "pnl_pct": 0.73,
-      "reason": "manual",
-      "closed_at": "2026-05-06T12:00:30.469997+08:00"
-    }
-  ]
+  "recent_closed": [],
 }
